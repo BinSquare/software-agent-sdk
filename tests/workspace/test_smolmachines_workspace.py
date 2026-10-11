@@ -390,3 +390,31 @@ def test_keep_alive_rejects_host_state_inside_guest_mount(fake_smol, tmp_path):
             host_port=38133,
         )
     assert not fake_smol.created
+
+
+def test_forwarded_session_key_is_not_serialized_or_shown_in_repr(
+    fake_smol, monkeypatch
+):
+    from openhands.workspace import SmolMachinesWorkspace
+
+    monkeypatch.setenv("OH_SESSION_API_KEYS_0", "session-key-should-stay-private")
+    workspace = SmolMachinesWorkspace(host_port=38140)
+    assert workspace.api_key == "session-key-should-stay-private"
+    assert "session-key-should-stay-private" not in repr(workspace)
+    assert "session-key-should-stay-private" not in workspace.model_dump_json()
+    assert "api_key" not in workspace.model_dump()
+    workspace.cleanup()
+
+
+def test_kept_workspace_reuses_vm_after_config_round_trip(fake_smol):
+    from openhands.workspace import SmolMachinesWorkspace
+
+    first = SmolMachinesWorkspace(keep_alive=True, machine_name="round-trip")
+    name = first.machine_name
+    config = first.model_dump()
+    first.cleanup()
+
+    reopened = SmolMachinesWorkspace.model_validate(config)
+    assert reopened.machine_name == name
+    assert fake_smol.connected == [name]
+    reopened.cleanup()

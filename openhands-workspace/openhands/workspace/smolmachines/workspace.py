@@ -83,6 +83,9 @@ class SmolMachinesWorkspace(RemoteWorkspace):
             result = workspace.execute_command("uname -r")
     """
 
+    # This credential is reconstructed from the forwarded host environment.
+    # Never include it in a workspace dump or in logs that render repr(workspace).
+    api_key: str | None = Field(default=None, exclude=True, repr=False)
     working_dir: str = Field(
         default="/workspace",
         description="Working directory inside the machine.",
@@ -190,7 +193,13 @@ class SmolMachinesWorkspace(RemoteWorkspace):
             digest = hashlib.sha256(
                 json.dumps(shape, sort_keys=True).encode()
             ).hexdigest()[:16]
-            object.__setattr__(self, "machine_name", f"{self.machine_name}-{digest}")
+            # model_validate(model_dump()) must reconnect to the same VM;
+            # the dumped machine_name already includes its policy suffix.
+            suffix = f"-{digest}"
+            name = self.machine_name
+            assert name is not None
+            if not name.endswith(suffix):
+                object.__setattr__(self, "machine_name", f"{name}{suffix}")
             self._policy = hashlib.sha256(
                 json.dumps(self._forwarded_env(), sort_keys=True).encode()
             ).hexdigest()
